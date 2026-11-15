@@ -1,0 +1,8 @@
+{
+  "observationId": "p17:table:0",
+  "product": "urn:demo:obs:17::1.0",
+  "measurements": [
+    12,
+    null
+  ]
+}

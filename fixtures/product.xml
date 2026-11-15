@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Product_Observational xmlns="http://pds.nasa.gov/pds4/pds/v1">
+  <Identification_Area><logical_identifier>urn:demo:obs:17</logical_identifier><version_id>1.0</version_id><title>环形山测量交接</title><information_model_version>1.20.0.0</information_model_version><product_class>Product_Observational</product_class></Identification_Area>
+  <File_Area_Observational>
+    <File><file_name>measure.bin</file_name><file_size unit="byte">56</file_size><md5_checksum>7a447dae0877a46111f758e432283d07</md5_checksum></File>
+    <Table_Binary><local_identifier>measurements</local_identifier><offset unit="byte">0</offset><records>2</records>
+      <Record_Binary><fields>1</fields><groups>1</groups><record_length unit="byte">28</record_length>
+        <Field_Binary><name>observation</name><field_location unit="byte">1</field_location><data_type>UnsignedMSB4</data_type><field_length unit="byte">4</field_length></Field_Binary>
+        <Group_Field_Binary><name>readings</name><group_location unit="byte">5</group_location><repetitions>2</repetitions><fields>2</fields><groups>1</groups><group_length unit="byte">24</group_length>
+          <Field_Binary><name>temperature</name><field_location unit="byte">1</field_location><data_type>IEEE754LSBSingle</data_type><field_length unit="byte">4</field_length><scaling_factor>2</scaling_factor><value_offset>10</value_offset><Special_Constants><missing_constant>-9999</missing_constant></Special_Constants></Field_Binary>
+          <Field_Binary><name>quality</name><field_location unit="byte">5</field_location><data_type>UnsignedLSB2</data_type><field_length unit="byte">2</field_length></Field_Binary>
+          <Group_Field_Binary><name>flags</name><group_location unit="byte">7</group_location><repetitions>3</repetitions><fields>1</fields><groups>0</groups><group_length unit="byte">6</group_length>
+            <Field_Binary><name>flag</name><field_location unit="byte">1</field_location><data_type>UnsignedLSB2</data_type><field_length unit="byte">2</field_length></Field_Binary>
+          </Group_Field_Binary>
+        </Group_Field_Binary>
+      </Record_Binary>
+    </Table_Binary>
+    <Table_Binary><local_identifier>unsupported-note</local_identifier><offset unit="byte">0</offset><records>1</records><Record_Binary><fields>1</fields><groups>0</groups><record_length unit="byte">4</record_length><Field_Binary><name>reserved</name><field_location unit="byte">1</field_location><data_type>Custom_Note</data_type><field_length unit="byte">4</field_length></Field_Binary></Record_Binary></Table_Binary>
+  </File_Area_Observational>
+</Product_Observational>
