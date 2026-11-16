@@ -5,21 +5,33 @@ import { join } from 'node:path';
 
 export const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 
+async function readJournal(file) {
+  try {
+    return (await readFile(file, 'utf8')).split('\n').filter(Boolean).map(line => JSON.parse(line));
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    return [];
+  }
+}
+
 export async function openStore(directory) {
   await mkdir(join(directory, 'blobs'), { recursive: true });
   const journal = join(directory, 'receipts.jsonl');
-  let receipts;
-  try {
-    receipts = (await readFile(journal, 'utf8')).split('\n').filter(Boolean).map(line => JSON.parse(line));
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
-    receipts = [];
-  }
+  const ingestJournal = join(directory, 'ingests.jsonl');
+  let receipts = await readJournal(journal);
+  let ingests = await readJournal(ingestJournal);
   let pending = Promise.resolve();
   const serialize = operation => {
     const next = pending.then(operation);
     pending = next.catch(() => {});
     return next;
+  };
+  const saveBlob = async (directoryPath, ref, bytes) => {
+    try {
+      await writeFile(join(directoryPath, 'blobs', ref.sha256), bytes, { flag: 'wx' });
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+    }
   };
   return {
     list() {
@@ -30,9 +42,39 @@ export async function openStore(directory) {
     history(key) {
       return structuredClone(receipts.filter(receipt => receipt.key === key));
     },
+    listIngests() {
+      return structuredClone(ingests);
+    },
+    ingest(ingestId) {
+      const found = ingests.find(receipt => receipt.ingestId === ingestId);
+      return found ? structuredClone(found) : null;
+    },
     async evidence(sha) {
       if (!/^[a-f0-9]{64}$/.test(sha)) throw Object.assign(new Error('依据标识无效'), { status: 400 });
       return readFile(join(directory, 'blobs', sha));
+    },
+    // 自动收件：结构化结果与原始字节都落盘；字节经 sha256 内容寻址，与人工收件共用 blob 目录。
+    acceptIngest(receipt, identity, blobs) {
+      return serialize(async () => {
+        if (!Array.isArray(blobs) || blobs.length === 0) {
+          throw Object.assign(new Error('自动收件缺少标签或数据原始字节'), { status: 422 });
+        }
+        for (const blob of blobs) {
+          if (!Buffer.isBuffer(blob.bytes) || !/^[a-f0-9]{64}$/.test(blob.sha256) || digest(blob.bytes) !== blob.sha256) {
+            throw Object.assign(new Error('自动收件字节与摘要不一致，拒绝落盘'), { status: 422 });
+          }
+        }
+        const existing = ingests.find(item => item.identity === identity);
+        if (existing) return { ...structuredClone(existing), duplicate: true };
+        for (const blob of blobs) await saveBlob(directory, { sha256: blob.sha256 }, blob.bytes);
+        // 原始字节已按内容寻址存入 blobs 目录，结构化收据不内嵌字节，避免 JSON 膨胀。
+        const receiptWithoutBlobs = structuredClone(receipt);
+        delete receiptWithoutBlobs.blobs;
+        const stored = { ingestId: `ing-${ingests.length + 1}`, sequence: ingests.length + 1, identity, ...receiptWithoutBlobs };
+        await appendFile(ingestJournal, JSON.stringify(stored) + '\n');
+        ingests.push(stored);
+        return { ...structuredClone(stored), duplicate: false };
+      });
     },
     accept(key, record, evidence) {
       return serialize(async () => {

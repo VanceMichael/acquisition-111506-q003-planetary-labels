@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { openStore } from './store.mjs';
 import { validateRecord, product } from './domain.mjs';
+import { createSourceClient, runIngest, catalogObjects, ingestIdentity } from './ingest.mjs';
 
 export async function readJson(request, limit = 8 * 1024 * 1024) {
   const chunks = [];
@@ -35,6 +36,38 @@ export async function startApplication({ directory, port = 0, host = '127.0.0.1'
       }
       if (request.method === 'GET' && url.pathname === '/api/records') return sendJson(response, 200, store.list());
       if (request.method === 'GET' && url.pathname === '/api/history') return sendJson(response, 200, store.history(url.searchParams.get('key')));
+      // 自动来源：先盘点标签内可选择的对象，不下载数据文件。
+      if (request.method === 'GET' && url.pathname === '/api/source/objects') {
+        const baseUrl = url.searchParams.get('baseUrl');
+        const labelPath = url.searchParams.get('labelPath') ?? '/products/17/label.xml';
+        if (!baseUrl) return sendJson(response, 422, { error: '缺少合作来源地址 baseUrl' });
+        const catalog = await catalogObjects({ client: createSourceClient(baseUrl), labelPath });
+        return sendJson(response, 200, catalog);
+      }
+      // 自动收件：按标签选择测量对象并领取对应字节。
+      if (request.method === 'POST' && url.pathname === '/api/ingest') {
+        const input = await readJson(request);
+        const receipt = await runIngest({
+          baseUrl: input.baseUrl,
+          labelPath: input.labelPath ?? '/products/17/label.xml',
+          objectIds: input.objectIds ?? [],
+          window: input.window,
+          mode: input.mode ?? 'full',
+        });
+        // 字节按 sha256 内容寻址落盘，结构化收据本身不内嵌原始字节。
+        const blobs = receipt.blobs;
+        const stored = await store.acceptIngest(receipt, ingestIdentity(receipt), blobs);
+        return sendJson(response, stored.duplicate ? 200 : 201, stored);
+      }
+      if (request.method === 'GET' && url.pathname === '/api/ingests') {
+        const id = url.searchParams.get('ingestId');
+        if (id) {
+          const found = store.ingest(id);
+          if (!found) return sendJson(response, 404, { error: '自动收件不存在' });
+          return sendJson(response, 200, found);
+        }
+        return sendJson(response, 200, store.listIngests());
+      }
       if (request.method === 'GET' && url.pathname.startsWith('/api/evidence/')) {
         const bytes = await store.evidence(url.pathname.slice('/api/evidence/'.length));
         response.writeHead(200, { 'content-type': 'application/octet-stream' });
